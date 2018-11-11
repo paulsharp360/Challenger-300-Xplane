@@ -1,0 +1,226 @@
+-- Pauls Challenger 300 Hardware Device : ARDUINO_MEGA2560_A_XXX
+-- Primary controls - Pilots Display Control Panel
+-- Generally GND is black or green and LED is red or yellow
+-- Version 4.1, includes ROT ENC's loops
+
+
+
+-- LED names and Arduino pin ARDUINO_MEGA2560_B_Dxx
+hw_name = "ARDUINO_MEGA2560_B_D"
+-- Default LED brightness levels
+on_brightness = 0.25
+off_brightness = 0.0
+-- Variables for LED test
+led_number = 0
+led_test_state = 0
+
+
+-- ##################################################################
+--
+-- ARRAYS
+--
+-- ##################################################################
+-- ******************************************************************
+-- L E D array
+-- Quickly create several LED variables. Add an entry to this array
+-- containing the LED name and the Arduino pin. A variable called
+-- led_Name will be created for each one
+LEDS = {
+-- {"Name", LED pin}
+{"PANEL_TEST", 52},
+}
+-- ******************************************************************
+-- ******************************************************************
+-- B u t t o n array
+-- Quickly create several push-button variables. Add an entry to this
+-- array containing the button name and the Arduino pin. Ensure you
+-- create Name_pressed() and Name_released() functions for each button
+-- function calls will be created for each button
+BUTTONS = {
+-- {"Name", button pin}
+{"PANEL_TEST", 12},
+}
+-- ******************************************************************
+-- ******************************************************************
+-- Simple l a t c h i n g button array
+-- Each button is assumed to be latching (push on/push off) with
+-- an associated LED and a simple dataref with 0 or 1 state.
+-- When the button is pressed (pushed in and latched) then the LED
+-- should be lit, and the dataref set to 1.
+-- When the button is released (popped out) then the LED is off and
+-- the dataref is set to 0.
+-- This should handle the majority of simple panels without needless
+-- duplication of code.
+-- Each element of the array represents a button, and itself has
+-- four elements. These represent the name of the button, the LED
+-- pin, the button pin and the dataref. The dataref can be omitted
+-- initially (set to empty string "") if it is unknown, or for testing.
+LATCHING_BUTTONS = {
+-- "Name", LED pin, button pin, "dataref"
+{"HALF", 4, 5, ""},
+{"DME", 6, 7, ""},
+{"NAVSRC", 8, 9, ""},
+{"FRMT", 10, 11, ""},
+-- pins 12 and 13 saved as in separate pin block
+{"TFC", 14, 15, ""},
+{"TRWX", 16, 17, ""},
+{"RADIO", 18, 19, ""},
+{"BRGSRC", 20, 21, ""},
+{"REFS", 22, 23, ""},
+{"RADAR", 24, 25, ""},
+
+}
+-- ******************************************************************
+-- ******************************************************************
+-- R O T A R Y E N C O D E R array
+-- Quickly create several ROT variables. Add an entry to this array
+-- containing the ROT name and the Arduino pin. A variable called
+-- rotary_id will be created for each one
+ROTENC = {
+-- {"Name", ClockW_pin, AntiClock, dataref}
+{"ROT_TUNR_OUT", 22,23,""},
+{"ROT_TUNR_IN", 24,25,""},	
+{"ROT_MENU_OUT", 26,27,""},
+{"ROT_MENU_IN", 28,29,""},	
+{"ROT_TILT_OUT", 30,31,""},
+{"ROT_TILT_IN", 32,33,""},
+
+}
+-- ******************************************************************
+
+
+
+-- ###################################################################
+--
+-- CUSTOM FUNCTIONS
+--
+-- ###################################################################
+
+
+
+-- Create LEDs from LED array, all initially off
+for i, j in ipairs(LEDS) do
+_G["led_"..j[1]]=hw_led_add(hw_name..j[2], off_brightness)
+end
+
+
+--Test LEDs
+function next_LED()
+led_number = led_number + 1
+-- fixme: Incorporate other LEDs here too
+LED = LATCHING_BUTTONS[led_number]
+if LED ~= nil then
+if led_test_state == 0 then
+hw_led_set(_G["led_"..LED[1]], on_brightness)
+print("LED "..LED[1].." on")
+elseif led_test_state == 1 then
+hw_led_set(_G["led_"..LED[1]], off_brightness)
+print("LED "..LED[1].." off")
+end
+else
+if led_test_state == 0 then
+led_number = 0
+led_test_state = 1
+else
+timer_stop(led_test_timer)
+print("Timer stopped")
+end
+end
+end
+
+--timer_start(1000, 200, next_LED)
+-- fixme: we should stop this timer when all LEDs have been done
+
+
+
+-- ###################################################################
+--
+-- CUSTOM FUNCTIONS
+--
+-- ###################################################################
+-- ******************************************************************
+-- Put custom functions for BUTTONS array here.
+-- ** Panel Test Function **
+function PANEL_TEST_pressed()
+-- fixme: don't restart the timer if it's already running
+print("PANEL_TEST pressed")
+led_number = 0
+led_test_state = 0
+led_test_timer = timer_start(500, 200, next_LED) -- this line doubleus up as a tester
+end
+function PANEL_TEST_released()
+print("PANEL_TEST released")
+end
+-- ** LED Brightness Function ** 
+-- Pot for LED brightness this needs to reflect the brightness on XP so there is a common value for all instruments OR keep as individual
+function adc_input_change(BrightnessValue)
+print("new value= " .. tostring(BrightnessValue) )
+if BrightnessValue > 0 then
+on_brightness = BrightnessValue
+else
+on_brightness = 0.01
+end
+-- fixme: propagate new brightness to all LEDs that are currently on
+end
+-- ******************************************************************
+-- ###################################################################
+--
+-- ARRAY Automated FUNCTIONS
+--
+-- ###################################################################
+-- Now create function calls for BUTTONS array
+for i, j in ipairs(BUTTONS) do
+hw_button_add(hw_name..j[2], _G[j[1].."_pressed"], _G[j[1].."_released"])
+end
+-- function calls for ROTENC array
+for i, j in ipairs(ROTENC) do
+_G["ROT_"..j[1]]=hw_dial_add(hw_name..j[2], hw_name..j[3],function(direction) ROT_CHANGE(j[1], j[4], direction) end)
+end
+-- Support for simple latching buttons
+-- All button presses in the LATCHING_BUTTONS array will call these
+-- functions, with parameters specific to this button
+
+function ROT_CHANGE(rotary_id,dataref,direction)
+if direction == -1 then
+print(rotary_id.." Turn anticlockwise")
+else
+print(rotary_id.." Turn clockwise")
+end
+-- fixme: Command to set dataref=1 here
+end
+
+
+
+
+function button_pressed(button_id, dataref)
+print(button_id.." button pressed")
+hw_led_set(_G["led_"..button_id], on_brightness)
+-- fixme: Command to set dataref=1 here
+end
+
+function button_released(button_id, dataref)
+print(button_id.." button released")
+hw_led_set(_G["led_"..button_id], off_brightness)
+-- fixme: Command to set dataref=0 here
+end
+
+-- Create LEDs and function calls for LATCHING_BUTTONS array 
+for i, j in ipairs(LATCHING_BUTTONS) do
+_G["led_"..j[1]] = hw_led_add(hw_name..j[2], off_brightness)
+hw_button_add(hw_name..j[3], function() button_pressed(j[1], j[4]) end, function() button_released(j[1], j[4]) end)
+end
+
+
+
+
+
+-- ###################################################################
+--
+-- BINDING of NON STANDARD COMPONENTS
+--
+-- ###################################################################
+
+
+-- Brightness Bind to the pin A13
+hw_adc_input_add("ARDUINO_MEGA2560_B_A13", adc_input_change)
+-- fixme: use hw_name here somehow
